@@ -23,7 +23,7 @@ app.post("/webhook", async (req, res) => {
   return res.send(response);
 });
 
-app.listen(8080, () => {
+app.listen(process.env.PORT || 8080, () => {
   console.log("Server Running on port 8080");
 });
 
