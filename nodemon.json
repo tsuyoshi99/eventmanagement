@@ -1,0 +1,9 @@
+{
+  "verbose": true,
+  "watch": ["src/"],
+  "env": {
+    "GOOGLE_APPLICATION_CREDENTIALS": ""
+  },
+  "exec": "yarn ts-node src/index.ts",
+  "ext": "ts"
+}
