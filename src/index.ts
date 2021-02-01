@@ -1,6 +1,6 @@
 require("dotenv").config();
 import * as admin from "firebase-admin";
-import * as express from "express";
+import express from "express";
 import axios from "axios";
 import {
   GoogleCloudDialogflowV2WebhookRequest,
@@ -16,11 +16,13 @@ app.use(express.json());
 app.post("/webhook", async (req, res) => {
   const body: GoogleCloudDialogflowV2WebhookRequest = req.body;
 
-  const intent = body.queryResult.intent.displayName;
+  const intent = body.queryResult?.intent?.displayName;
 
-  const response = await intentMap[intent](body);
+  if (intent) {
+    const response = await intentMap[intent](body);
 
-  return res.send(response);
+    return res.send(response);
+  }
 });
 
 app.listen(process.env.PORT || 8080, () => {
@@ -62,9 +64,12 @@ const getUserByName = async (name: string) => {
 const getTicket = async (
   req: GoogleCloudDialogflowV2WebhookRequest
 ): Promise<GoogleCloudDialogflowV2WebhookResponse> => {
-  const senderId = req.originalDetectIntentRequest.payload.data.sender.id;
-  const ticketId = req.queryResult.parameters.number;
-  const sender = await getNameBySenderId(senderId, process.env.ACCESS_TOKEN);
+  const senderId = req.originalDetectIntentRequest?.payload?.data.sender.id;
+  const ticketId = req.queryResult?.parameters?.number;
+  const sender = await getNameBySenderId(
+    senderId,
+    `${process.env.ACCESS_TOKEN}`
+  );
   const name = sender.data.name;
   const user = await getUserByName(name);
 
@@ -121,19 +126,19 @@ const evalYesOrNo = async (
   req: GoogleCloudDialogflowV2WebhookRequest,
   answer: boolean
 ): Promise<GoogleCloudDialogflowV2WebhookResponse> => {
-  const askingQuestion = req.queryResult.outputContexts.filter((context) => {
+  const askingQuestion = req.queryResult?.outputContexts?.filter((context) => {
     return context.name == `${req.session}/contexts/askingquestion`;
   })[0];
-  const currentQuestionIndex = askingQuestion.parameters.currentQuestion;
+  const currentQuestionIndex = askingQuestion?.parameters?.currentQuestion;
   const nextQuestionIndex = currentQuestionIndex + 1;
   const nextQuestion = questionsToAsk[nextQuestionIndex];
-  const answers = askingQuestion.parameters.answers as Array<boolean>;
+  const answers = askingQuestion?.parameters?.answers as Array<boolean>;
   answers[currentQuestionIndex] = answer;
   if (nextQuestionIndex >= questionsToAsk.length) {
     admin
       .firestore()
       .collection("users")
-      .doc(askingQuestion.parameters.userId)
+      .doc(askingQuestion?.parameters?.userId)
       .update({ answers })
       .then(() => {
         console.log("done");
@@ -170,7 +175,7 @@ const no = async (
   return evalYesOrNo(req, false);
 };
 
-const intentMap = {
+const intentMap: { [key: string]: any } = {
   getTicket,
   yes,
   no,
