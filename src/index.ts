@@ -140,7 +140,7 @@ const getTicket = async (
     fulfillmentMessages: [
       {
         text: {
-          text: ["Sorry! It seems like you're not one of the participant."],
+          text: ["Sorry! It seems like your ticket id is incorrect"],
         },
       },
     ],
