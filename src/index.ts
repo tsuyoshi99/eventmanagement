@@ -18,6 +18,8 @@ app.post("/webhook", async (req, res) => {
 
   const intent = body.queryResult?.intent?.displayName;
 
+  console.log(JSON.stringify(body, null, 2));
+
   if (intent) {
     const response = await intentMap[intent](body);
 
@@ -29,11 +31,6 @@ app.listen(process.env.PORT || 8080, () => {
   console.log("Server Running on port 8080");
 });
 
-const questionsToAsk = [
-  "Will you join the first day of event ?",
-  "What about the second day ?",
-];
-
 const getNameBySenderId = (senderId: string, accessToken: string) => {
   const url = `https://graph.facebook.com/${senderId}?fields=name&access_token=${accessToken}`;
   return axios.get(url);
@@ -44,18 +41,45 @@ const getUserByName = async (name: string) => {
     const user = await admin
       .firestore()
       .collection("users")
-      .where("name", "==", name)
+      .where("facebookName", "==", name)
       .limit(1)
       .get();
 
     if (!user.empty) {
       return { ...user.docs[0].data(), id: user.docs[0].id } as {
         id: string;
-        name: string;
+        facebookName: string;
         ticketId: string;
+        participation: { attend: boolean; groupId: string }[];
       };
     }
     return null;
+  } catch (err) {
+    throw err;
+  }
+};
+const getGroupsByUser = async (user: {
+  id: string;
+  facebookName: string;
+  ticketId: string;
+  participation: { attend: boolean; groupId: string }[];
+}) => {
+  try {
+    const groupIds = user.participation.map((val) => {
+      return admin.firestore().collection("groups").doc(val.groupId);
+    });
+    const groups = await admin
+      .firestore()
+      .getAll(...groupIds)
+      .then((snap) => {
+        return snap.map((doc) => {
+          return { id: doc.id, ...doc.data() } as {
+            id: string;
+            [key: string]: any;
+          };
+        });
+      });
+    return groups;
   } catch (err) {
     throw err;
   }
@@ -85,6 +109,8 @@ const getTicket = async (
     };
   }
 
+  const groups = await getGroupsByUser(user);
+
   if (ticketId == user.ticketId) {
     return {
       fulfillmentMessages: [
@@ -96,8 +122,9 @@ const getTicket = async (
           },
         },
         {
-          text: {
-            text: [questionsToAsk[0]],
+          quickReplies: {
+            title: `Would you join ${groups[0]?.groupName}?`,
+            quickReplies: ["Yes", "No"],
           },
         },
       ],
@@ -105,7 +132,7 @@ const getTicket = async (
         {
           name: `${req.session}/contexts/askingquestion`,
           lifespanCount: 10,
-          parameters: { currentQuestion: 0, answers: [], userId: user.id },
+          parameters: { currentQuestion: 0, answers: [], user, groups },
         },
       ],
     };
@@ -115,7 +142,7 @@ const getTicket = async (
     fulfillmentMessages: [
       {
         text: {
-          text: ["It seems like there is some error."],
+          text: ["Sorry! It seems like you're not one of the participant."],
         },
       },
     ],
@@ -131,37 +158,73 @@ const evalYesOrNo = async (
   })[0];
   const currentQuestionIndex = askingQuestion?.parameters?.currentQuestion;
   const nextQuestionIndex = currentQuestionIndex + 1;
-  const nextQuestion = questionsToAsk[nextQuestionIndex];
   const answers = askingQuestion?.parameters?.answers as Array<boolean>;
   answers[currentQuestionIndex] = answer;
-  if (nextQuestionIndex >= questionsToAsk.length) {
+  const nextQuestion = `Would you join ${askingQuestion?.parameters?.groups?.[nextQuestionIndex]?.groupName}?`;
+  if (nextQuestionIndex >= askingQuestion?.parameters?.groups.length) {
+    const participation = (askingQuestion?.parameters?.user?.participation as {
+      groupId: string;
+      attend: boolean;
+    }[]).map((val, i) => {
+      val.attend = answers[i];
+      return val;
+    });
     admin
       .firestore()
       .collection("users")
-      .doc(askingQuestion?.parameters?.userId)
-      .update({ answers })
+      .doc(askingQuestion?.parameters?.user.id)
+      .update({ answers, participation })
       .then(() => {
         console.log("done");
       })
       .catch((err) => {
         console.log(err);
       });
-    const msg = [
-      "The First Day: 5:00pm-6:00pm 2nd Floor\n",
-      "The Second Day: 5:00pm:6:00pm 3rd Floor",
-    ];
-    let testMsg = "";
-    answers.forEach((value, index) => {
-      if (value) {
-        testMsg += msg[index];
+    const msg = { text: { text: ["Here are all the details of event:"] } };
+    const info = (askingQuestion?.parameters?.groups as Array<any>).reduce<
+      Array<{ text: { text: string[] } }>
+    >((total, val, index) => {
+      const members = (val.members as {
+        name: string;
+        facebookLink: string;
+      }[]).reduce<string>((total, val) => {
+        total += `→${val.name} (${val.facebookLink})\n`;
+        return total;
+      }, "");
+      if (answers[index]) {
+        total.push({
+          text: {
+            text: [
+              `\n\nGroup Name: ${val.groupName}\n${
+                val.leader.name
+                  ? `Leader: ${val.leader.name} (${val.leader.facebookLink})`
+                  : ""
+              }\nMembers: \n${members}`,
+            ],
+          },
+        });
       }
-    });
+      return total;
+    }, []);
     return {
-      fulfillmentMessages: [{ text: { text: [testMsg] } }],
+      fulfillmentMessages: [msg, ...info, { text: { text: ["Thank you"] } }],
+      outputContexts: [
+        {
+          name: `${req.session}/contexts/askingquestion`,
+          lifespanCount: 0,
+        },
+      ],
     };
   }
   return {
-    fulfillmentMessages: [{ text: { text: [nextQuestion] } }],
+    fulfillmentMessages: [
+      {
+        quickReplies: {
+          title: nextQuestion,
+          quickReplies: ["Yes", "No"],
+        },
+      },
+    ],
     outputContexts: [
       {
         name: `${req.session}/contexts/askingquestion`,
