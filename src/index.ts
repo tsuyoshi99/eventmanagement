@@ -25,8 +25,8 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 8080, () => {
-  console.log("Server Running on port 8080");
+app.listen(process.env.PORT || 9090, () => {
+  console.log("Server Running on port 9090");
 });
 
 const getNameBySenderId = (senderId: string, accessToken: string) => {
