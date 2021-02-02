@@ -18,8 +18,6 @@ app.post("/webhook", async (req, res) => {
 
   const intent = body.queryResult?.intent?.displayName;
 
-  console.log(JSON.stringify(body, null, 2));
-
   if (intent) {
     const response = await intentMap[intent](body);
 
