@@ -146,8 +146,18 @@ const evalYesOrNo = async (
       .catch((err) => {
         console.log(err);
       });
+    const msg = [
+      "The First Day: 5:00pm-6:00pm 2nd Floor\n",
+      "The Second Day: 5:00pm:6:00pm 3rd Floor",
+    ];
+    let testMsg = "";
+    answers.forEach((value, index) => {
+      if (value) {
+        testMsg += msg[index];
+      }
+    });
     return {
-      fulfillmentMessages: [{ text: { text: ["Thank you"] } }],
+      fulfillmentMessages: [{ text: { text: [testMsg] } }],
     };
   }
   return {
@@ -164,11 +174,13 @@ const evalYesOrNo = async (
     ],
   };
 };
+
 const yes = async (
   req: GoogleCloudDialogflowV2WebhookRequest
 ): Promise<GoogleCloudDialogflowV2WebhookResponse> => {
   return evalYesOrNo(req, true);
 };
+
 const no = async (
   req: GoogleCloudDialogflowV2WebhookRequest
 ): Promise<GoogleCloudDialogflowV2WebhookResponse> => {
